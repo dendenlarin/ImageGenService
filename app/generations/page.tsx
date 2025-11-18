@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { GenerationList } from '@/components/organisms/generation-list'
 import { GenerationForm } from '@/components/organisms/generation-form'
 import { GenerationDetail } from '@/components/organisms/generation-detail'
+import { ImageGallery } from '@/components/organisms/image-gallery'
 import { Generation } from '@/lib/types'
 import { getGenerations, saveGenerations } from '@/lib/storage'
 
@@ -67,6 +68,30 @@ export default function GenerationsPage() {
     saveGenerations(updatedGenerations)
     setSelectedGeneration(generation)
   }
+
+  const handleDeleteImage = (imageId: string) => {
+    if (!selectedGeneration) return
+
+    const updatedTasks = selectedGeneration.tasks.filter((t) => t.id !== imageId)
+    const updatedGeneration = {
+      ...selectedGeneration,
+      tasks: updatedTasks,
+      updatedAt: new Date().toISOString(),
+    }
+
+    handleUpdateGeneration(updatedGeneration)
+  }
+
+  // Get all completed images from selected generation
+  const galleryImages = selectedGeneration
+    ? selectedGeneration.tasks
+        .filter((t) => t.status === 'completed' && t.imageUrl)
+        .map((t) => ({
+          id: t.id,
+          url: t.imageUrl!,
+          prompt: t.prompt,
+        }))
+    : []
 
   return (
     <MainLayout
@@ -159,6 +184,15 @@ export default function GenerationsPage() {
             )}
           </div>
         </div>
+
+        {/* Full-width Gallery Section */}
+        {selectedGeneration && (
+          <ImageGallery
+            images={galleryImages}
+            onDelete={handleDeleteImage}
+            className="mt-6"
+          />
+        )}
       </div>
     </MainLayout>
   )

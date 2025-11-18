@@ -5,14 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import {
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-  CarouselNext,
-  CarouselPrevious,
-} from '@/components/ui/carousel'
 import { Generation, GenerationTask } from '@/lib/types'
 import { getPromptById } from '@/lib/storage'
 import { generateImageWithGemini } from '@/lib/ai-api'
@@ -48,13 +40,6 @@ export function GenerationDetail({
     (t) => t.status === 'processing'
   ).length
 
-  const completedImages = generation.tasks
-    .filter((t) => t.status === 'completed' && t.imageUrl)
-    .map((t) => ({
-      id: t.id,
-      url: t.imageUrl!,
-      prompt: t.prompt,
-    }))
 
   const handleDelete = () => {
     if (
@@ -262,19 +247,12 @@ export function GenerationDetail({
           </div>
         </div>
 
-        {/* Tabs for Queue and Gallery */}
-        <Tabs defaultValue="queue" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="queue">
-              Очередь ({generation.tasks.length})
-            </TabsTrigger>
-            <TabsTrigger value="gallery">
-              Галерея ({completedImages.length})
-            </TabsTrigger>
-          </TabsList>
-
-          {/* Queue Tab */}
-          <TabsContent value="queue" className="space-y-4">
+        {/* Queue Management */}
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-medium">
+              Очередь генераций ({generation.tasks.length})
+            </h3>
             <div className="flex gap-2">
               {completedTasks > 0 && (
                 <Button variant="outline" size="sm" onClick={handleClearCompleted}>
@@ -287,99 +265,70 @@ export function GenerationDetail({
                 </Button>
               )}
               {generation.tasks.length > 0 && (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={handleClearAll}
-                >
+                <Button variant="destructive" size="sm" onClick={handleClearAll}>
                   Очистить все
                 </Button>
               )}
             </div>
+          </div>
 
-            <ScrollArea className="h-[400px] rounded-md border">
-              {generation.tasks.length === 0 ? (
-                <div className="p-8 text-center text-sm text-muted-foreground">
-                  Очередь пуста
-                </div>
-              ) : (
-                <div className="p-4 space-y-2">
-                  {generation.tasks.map((task, index) => (
-                    <div
-                      key={task.id}
-                      className={cn(
-                        'rounded-md border p-3',
-                        currentTaskIndex === index && 'border-primary bg-accent'
-                      )}
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex-1 space-y-2">
-                          <div className="flex items-center gap-2">
-                            <Badge variant="outline" className="text-xs">
-                              #{index + 1}
-                            </Badge>
-                            {getTaskStatusBadge(task.status)}
-                            {task.status === 'processing' && (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            )}
-                          </div>
-                          <p className="text-sm line-clamp-2">{task.prompt}</p>
-                          {task.error && (
-                            <p className="text-xs text-destructive">{task.error}</p>
-                          )}
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => handleDeleteTask(task.id)}
-                          disabled={task.status === 'processing'}
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </ScrollArea>
-          </TabsContent>
-
-          {/* Gallery Tab */}
-          <TabsContent value="gallery" className="space-y-4">
-            {completedImages.length === 0 ? (
-              <div className="flex h-[400px] items-center justify-center rounded-md border">
-                <div className="text-center text-sm text-muted-foreground">
-                  Пока нет сгенерированных изображений
-                </div>
+          <ScrollArea className="h-[400px] rounded-md border">
+            {generation.tasks.length === 0 ? (
+              <div className="p-8 text-center text-sm text-muted-foreground">
+                Очередь пуста
               </div>
             ) : (
-              <Carousel className="w-full">
-                <CarouselContent>
-                  {completedImages.map((image) => (
-                    <CarouselItem key={image.id}>
-                      <div className="space-y-4">
-                        <div className="aspect-square overflow-hidden rounded-lg border">
-                          <img
-                            src={image.url}
-                            alt={image.prompt}
-                            className="h-full w-full object-cover"
-                          />
+              <div className="p-4 space-y-2">
+                {generation.tasks.map((task, index) => (
+                  <div
+                    key={task.id}
+                    className={cn(
+                      'rounded-md border p-3',
+                      currentTaskIndex === index && 'border-primary bg-accent'
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="text-xs">
+                            #{index + 1}
+                          </Badge>
+                          {getTaskStatusBadge(task.status)}
+                          {task.status === 'processing' && (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          )}
+                          {task.retryCount && task.retryCount > 0 && (
+                            <Badge variant="outline" className="text-xs">
+                              Retry: {task.retryCount}
+                            </Badge>
+                          )}
                         </div>
-                        <div className="rounded-md border p-3 text-sm">
-                          <p className="text-muted-foreground">Промпт:</p>
-                          <p className="mt-1">{image.prompt}</p>
-                        </div>
+                        <p className="text-sm line-clamp-2">{task.prompt}</p>
+                        {task.error && (
+                          <div className="rounded bg-destructive/10 p-2">
+                            <p className="text-xs text-destructive font-medium">
+                              Ошибка:
+                            </p>
+                            <p className="text-xs text-destructive">{task.error}</p>
+                          </div>
+                        )}
                       </div>
-                    </CarouselItem>
-                  ))}
-                </CarouselContent>
-                <CarouselPrevious />
-                <CarouselNext />
-              </Carousel>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => handleDeleteTask(task.id)}
+                        disabled={task.status === 'processing'}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
-          </TabsContent>
-        </Tabs>
+          </ScrollArea>
+        </div>
       </CardContent>
     </Card>
   )

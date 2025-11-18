@@ -3,6 +3,8 @@
 export interface Settings {
   openaiApiKey: string
   geminiApiKey: string
+  qstashToken?: string
+  qstashUrl?: string
   systemPrompts: {
     parameters: string
     prompts: string
@@ -42,6 +44,8 @@ export interface GenerationTask {
   status: 'pending' | 'processing' | 'completed' | 'failed'
   imageUrl?: string
   error?: string
+  qstashMessageId?: string
+  retryCount?: number
   createdAt: string
   completedAt?: string
 }

@@ -24,6 +24,8 @@ import { Settings } from '@/lib/types'
 const settingsSchema = z.object({
   openaiApiKey: z.string().optional(),
   geminiApiKey: z.string().optional(),
+  qstashToken: z.string().optional(),
+  qstashUrl: z.string().optional(),
   systemPrompts: z.object({
     parameters: z.string().min(1, 'Системный промпт для параметров обязателен'),
     prompts: z.string().min(1, 'Системный промпт для промптов обязателен'),
@@ -106,6 +108,27 @@ export function SettingsForm() {
                   </FormControl>
                   <FormDescription>
                     Используется для генерации изображений
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="qstashToken"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>QStash Token (Опционально)</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="password"
+                      placeholder="eyJ..."
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Используется для управления очередями генерации (опционально)
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
