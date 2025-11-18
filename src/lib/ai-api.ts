@@ -1,10 +1,12 @@
 // AI API utilities for OpenAI and Gemini
 
+import { generateText } from 'ai'
+import { openai } from '@ai-sdk/openai'
 import { getSettings } from './storage'
 import { GeminiModel } from './types'
 
 /**
- * Generate text using OpenAI API
+ * Generate text using OpenAI API with Vercel AI SDK
  */
 export async function generateWithOpenAI(
   systemPrompt: string,
@@ -17,30 +19,17 @@ export async function generateWithOpenAI(
   }
 
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${settings.openaiApiKey}`,
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        temperature: 0.7,
-        max_tokens: 1000,
+    const { text } = await generateText({
+      model: openai('gpt-4o-mini', {
+        apiKey: settings.openaiApiKey,
       }),
+      system: systemPrompt,
+      prompt: userPrompt,
+      temperature: 0.7,
+      maxTokens: 1000,
     })
 
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.error?.message || 'OpenAI API request failed')
-    }
-
-    const data = await response.json()
-    return data.choices[0]?.message?.content || ''
+    return text
   } catch (error) {
     console.error('OpenAI API error:', error)
     throw error
@@ -70,7 +59,8 @@ export async function generatePromptContent(
 }
 
 /**
- * Generate image using Gemini Imagen API
+ * Generate image using Gemini Imagen API via Next.js API route
+ * This avoids CORS issues by running the request on the server
  */
 export async function generateImageWithGemini(
   prompt: string,
@@ -82,40 +72,27 @@ export async function generateImageWithGemini(
     throw new Error('Gemini API key not configured')
   }
 
-  // Note: This is a placeholder implementation
-  // The actual Gemini Imagen API endpoint and request format may differ
-  // Update this based on the official Gemini API documentation
-
   try {
-    const modelName = model === 'imagen-4' ? 'imagen-4.0-generate-001' : 'nano-banana'
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generate`
-
-    const response = await fetch(endpoint, {
+    // Call our API route instead of directly calling Gemini API
+    const response = await fetch('/api/generate-image', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-goog-api-key': settings.geminiApiKey,
       },
       body: JSON.stringify({
-        prompt: {
-          text: prompt,
-        },
-        config: {
-          aspectRatio: '1:1',
-          numberOfImages: 1,
-        },
+        prompt,
+        model,
+        apiKey: settings.geminiApiKey,
       }),
     })
 
     if (!response.ok) {
       const error = await response.json()
-      throw new Error(error.error?.message || 'Gemini API request failed')
+      throw new Error(error.error || 'Image generation failed')
     }
 
     const data = await response.json()
-    // Extract image URL from response
-    // This depends on the actual API response format
-    return data.images?.[0]?.url || data.generatedImages?.[0]?.url || ''
+    return data.imageUrl
   } catch (error) {
     console.error('Gemini API error:', error)
     throw error
