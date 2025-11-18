@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { experimental_generateImage as generateImage } from 'ai'
 import { GeminiModel } from '@/lib/types'
+import { uploadImageWithFallback } from '@/lib/supabase-storage'
 
 /**
  * Retry utility for handling transient errors
@@ -46,7 +47,15 @@ async function retryWithBackoff<T>(
  */
 export async function POST(request: NextRequest) {
   try {
-    const { prompt, model, apiKey } = await request.json()
+    const {
+      prompt,
+      model,
+      apiKey,
+      generationId,
+      taskId,
+      supabaseUrl,
+      supabaseAnonKey,
+    } = await request.json()
 
     if (!prompt || !model || !apiKey) {
       return NextResponse.json(
@@ -87,12 +96,23 @@ export async function POST(request: NextRequest) {
       1000 // base delay in ms
     )
 
-    // Convert image to base64 data URL
+    // Convert image to base64
     const base64Image = image.base64
     const mimeType = image.contentType || 'image/png'
-    const imageUrl = `data:${mimeType};base64,${base64Image}`
 
-    console.log('Image generated successfully')
+    // Upload to Supabase (with fallback to base64 data URL)
+    const imageUrl = await uploadImageWithFallback(
+      base64Image,
+      generationId || 'default',
+      taskId || `task_${Date.now()}`,
+      {
+        url: supabaseUrl || '',
+        anonKey: supabaseAnonKey || '',
+      },
+      mimeType
+    )
+
+    console.log('Image generated and uploaded successfully')
 
     return NextResponse.json({ imageUrl })
   } catch (error) {

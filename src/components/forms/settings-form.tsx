@@ -26,6 +26,8 @@ const settingsSchema = z.object({
   geminiApiKey: z.string().optional(),
   qstashToken: z.string().optional(),
   qstashUrl: z.string().optional(),
+  supabaseUrl: z.string().optional(),
+  supabaseAnonKey: z.string().optional(),
   systemPrompts: z.object({
     parameters: z.string().min(1, 'Системный промпт для параметров обязателен'),
     prompts: z.string().min(1, 'Системный промпт для промптов обязателен'),
@@ -129,6 +131,48 @@ export function SettingsForm() {
                   </FormControl>
                   <FormDescription>
                     Используется для управления очередями генерации (опционально)
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="supabaseUrl"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Supabase URL (Опционально)</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="text"
+                      placeholder="https://your-project.supabase.co"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    URL вашего проекта Supabase для хранения изображений (опционально)
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="supabaseAnonKey"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Supabase Anon Key (Опционально)</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="password"
+                      placeholder="eyJ..."
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Публичный ключ Supabase для загрузки изображений (опционально)
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
