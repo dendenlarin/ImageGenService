@@ -17,9 +17,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Determine the model name
+    // Note: imagen-4 is not yet available, using imagen-3 instead
     const modelName =
-      model === 'imagen-4' ? 'imagen-4.0-generate-001' : 'nano-banana'
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generate`
+      model === 'imagen-4' ? 'imagen-3.0-generate-001' : 'imagen-3.0-generate-001'
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:predict`
 
     // Make the request to Gemini API
     const response = await fetch(endpoint, {
@@ -29,34 +30,58 @@ export async function POST(request: NextRequest) {
         'x-goog-api-key': apiKey,
       },
       body: JSON.stringify({
-        prompt: {
-          text: prompt,
-        },
-        config: {
+        instances: [
+          {
+            prompt: prompt,
+          },
+        ],
+        parameters: {
+          sampleCount: 1,
           aspectRatio: '1:1',
-          numberOfImages: 1,
         },
       }),
     })
 
     if (!response.ok) {
-      const error = await response.json()
-      console.error('Gemini API error:', error)
-      return NextResponse.json(
-        { error: error.error?.message || 'Gemini API request failed' },
-        { status: response.status }
-      )
+      let errorMessage = 'Gemini API request failed'
+      try {
+        const error = await response.json()
+        console.error('Gemini API error:', error)
+        errorMessage = error.error?.message || error.message || errorMessage
+      } catch (e) {
+        console.error('Failed to parse error response:', e)
+        errorMessage = `${errorMessage}: ${response.statusText} (${response.status})`
+      }
+      return NextResponse.json({ error: errorMessage }, { status: response.status })
     }
 
     const data = await response.json()
+    console.log('Gemini API response:', JSON.stringify(data, null, 2))
 
     // Extract image URL from response
+    // Gemini API returns predictions array with images
     const imageUrl =
-      data.images?.[0]?.url || data.generatedImages?.[0]?.url || ''
+      data.predictions?.[0]?.bytesBase64Encoded ||
+      data.predictions?.[0]?.mimeType ||
+      data.images?.[0]?.url ||
+      data.generatedImages?.[0]?.url ||
+      ''
+
+    // If we got base64 encoded image, convert it to data URL
+    if (data.predictions?.[0]?.bytesBase64Encoded) {
+      const mimeType = data.predictions[0].mimeType || 'image/png'
+      const base64Image = data.predictions[0].bytesBase64Encoded
+      return NextResponse.json({
+        imageUrl: `data:${mimeType};base64,${base64Image}`,
+      })
+    }
 
     if (!imageUrl) {
+      console.error('No image found in response:', data)
       return NextResponse.json(
-        { error: 'No image URL in response' },
+        {
+          error: 'No image URL in response. Check console for full response details.',
+        },
         { status: 500 }
       )
     }

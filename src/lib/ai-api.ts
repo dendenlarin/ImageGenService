@@ -87,8 +87,15 @@ export async function generateImageWithGemini(
     })
 
     if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.error || 'Image generation failed')
+      let errorMessage = 'Image generation failed'
+      try {
+        const error = await response.json()
+        errorMessage = error.error || errorMessage
+      } catch (e) {
+        // If response is not JSON, use status text
+        errorMessage = `${errorMessage}: ${response.statusText} (${response.status})`
+      }
+      throw new Error(errorMessage)
     }
 
     const data = await response.json()
