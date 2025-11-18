@@ -1,7 +1,7 @@
 // AI API utilities for OpenAI and Gemini
 
 import { generateText } from 'ai'
-import { openai } from '@ai-sdk/openai'
+import { createOpenAI } from '@ai-sdk/openai'
 import { getSettings } from './storage'
 import { GeminiModel } from './types'
 
@@ -19,10 +19,13 @@ export async function generateWithOpenAI(
   }
 
   try {
+    // Create OpenAI provider with API key
+    const openai = createOpenAI({
+      apiKey: settings.openaiApiKey,
+    })
+
     const { text } = await generateText({
-      model: openai('gpt-4o-mini', {
-        apiKey: settings.openaiApiKey,
-      }),
+      model: openai('gpt-4o-mini'),
       system: systemPrompt,
       prompt: userPrompt,
       temperature: 0.7,

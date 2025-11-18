@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -24,6 +24,7 @@ export function GenerationDetail({
 }: GenerationDetailProps) {
   const [isProcessing, setIsProcessing] = useState(false)
   const [currentTaskIndex, setCurrentTaskIndex] = useState<number | null>(null)
+  const isProcessingRef = useRef(false)
 
   const prompt = getPromptById(generation.promptId)
 
@@ -98,76 +99,83 @@ export function GenerationDetail({
     }
   }
 
-  const processNextTask = async () => {
-    const pendingTaskIndex = generation.tasks.findIndex(
-      (t) => t.status === 'pending'
-    )
+  const processQueue = async () => {
+    // Use while loop instead of recursion to process all pending tasks
+    while (isProcessingRef.current) {
+      // Get current generation state with fresh data
+      const pendingTaskIndex = generation.tasks.findIndex(
+        (t) => t.status === 'pending'
+      )
 
-    if (pendingTaskIndex === -1) {
-      setIsProcessing(false)
-      setCurrentTaskIndex(null)
-      return
-    }
+      // No more pending tasks, stop processing
+      if (pendingTaskIndex === -1) {
+        setIsProcessing(false)
+        setCurrentTaskIndex(null)
+        isProcessingRef.current = false
+        return
+      }
 
-    setCurrentTaskIndex(pendingTaskIndex)
-    const task = generation.tasks[pendingTaskIndex]
+      setCurrentTaskIndex(pendingTaskIndex)
+      const task = generation.tasks[pendingTaskIndex]
 
-    // Update task status to processing
-    const updatedTasks = [...generation.tasks]
-    updatedTasks[pendingTaskIndex] = {
-      ...task,
-      status: 'processing',
-    }
-    onUpdate({
-      ...generation,
-      tasks: updatedTasks,
-      updatedAt: new Date().toISOString(),
-    })
-
-    try {
-      // Generate image
-      const imageUrl = await generateImageWithGemini(task.prompt, generation.model)
-
-      // Update task with completed status
+      // Update task status to processing
+      const updatedTasks = [...generation.tasks]
       updatedTasks[pendingTaskIndex] = {
         ...task,
-        status: 'completed',
-        imageUrl,
-        completedAt: new Date().toISOString(),
+        status: 'processing',
       }
-    } catch (error) {
-      // Update task with failed status
-      updatedTasks[pendingTaskIndex] = {
-        ...task,
-        status: 'failed',
-        error: (error as Error).message,
-        completedAt: new Date().toISOString(),
+      onUpdate({
+        ...generation,
+        tasks: updatedTasks,
+        updatedAt: new Date().toISOString(),
+      })
+
+      try {
+        // Generate image
+        const imageUrl = await generateImageWithGemini(task.prompt, generation.model)
+
+        // Update task with completed status
+        updatedTasks[pendingTaskIndex] = {
+          ...task,
+          status: 'completed',
+          imageUrl,
+          completedAt: new Date().toISOString(),
+        }
+      } catch (error) {
+        // Update task with failed status
+        updatedTasks[pendingTaskIndex] = {
+          ...task,
+          status: 'failed',
+          error: (error as Error).message,
+          completedAt: new Date().toISOString(),
+        }
       }
+
+      onUpdate({
+        ...generation,
+        tasks: updatedTasks,
+        updatedAt: new Date().toISOString(),
+      })
+
+      // Wait for rate limit (convert requests per hour to milliseconds)
+      const delayMs = (60 * 60 * 1000) / generation.rateLimit
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
     }
 
-    onUpdate({
-      ...generation,
-      tasks: updatedTasks,
-      updatedAt: new Date().toISOString(),
-    })
-
-    // Wait for rate limit (convert requests per hour to milliseconds)
-    const delayMs = (60 * 60 * 1000) / generation.rateLimit
-    await new Promise((resolve) => setTimeout(resolve, delayMs))
-
-    // Process next task if still processing
-    if (isProcessing) {
-      await processNextTask()
-    }
+    // Processing stopped by user
+    setIsProcessing(false)
+    setCurrentTaskIndex(null)
   }
 
   const handleStartProcessing = async () => {
     setIsProcessing(true)
-    await processNextTask()
+    isProcessingRef.current = true
+    await processQueue()
   }
 
   const handleStopProcessing = () => {
     setIsProcessing(false)
+    isProcessingRef.current = false
     setCurrentTaskIndex(null)
   }
 

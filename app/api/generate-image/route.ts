@@ -73,7 +73,14 @@ export async function POST(request: NextRequest) {
         return await generateImage({
           model: google.image(modelName),
           prompt: prompt,
-          aspectRatio: '1:1',
+          aspectRatio: '16:9',
+          providerOptions: {
+            google: {
+              // Request higher quality output
+              // Note: Quality settings may vary by model version
+              sampleCount: 1,
+            },
+          },
         })
       },
       3, // max retries
