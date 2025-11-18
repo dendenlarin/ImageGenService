@@ -1,0 +1,7 @@
+node_modules
+dist
+build
+storybook-static
+.storybook
+coverage
+pnpm-lock.yaml
