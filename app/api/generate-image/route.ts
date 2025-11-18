@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { google } from '@ai-sdk/google'
+import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { experimental_generateImage as generateImage } from 'ai'
 import { GeminiModel } from '@/lib/types'
 
@@ -27,9 +27,12 @@ export async function POST(request: NextRequest) {
     console.log(`Generating image with model: ${modelName}`)
     console.log(`Prompt: ${prompt}`)
 
+    // Create Google provider instance with API key
+    const google = createGoogleGenerativeAI({ apiKey })
+
     // Generate image using Vercel AI SDK
     const { image } = await generateImage({
-      model: google.image(modelName, { apiKey }),
+      model: google.image(modelName),
       prompt: prompt,
       aspectRatio: '1:1',
     })
