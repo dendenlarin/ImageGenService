@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { google } from '@ai-sdk/google'
+import { experimental_generateImage as generateImage } from 'ai'
 import { GeminiModel } from '@/lib/types'
 
 /**
- * API route for generating images with Gemini API
- * This runs on the server to avoid CORS issues
+ * API route for generating images with Gemini API using Vercel AI SDK
+ * This runs on the server to avoid CORS issues and keep API keys secure
  */
 export async function POST(request: NextRequest) {
   try {
@@ -16,57 +18,34 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Determine the model name
+    // Map model names to correct Gemini model identifiers
     const modelName =
-      model === 'imagen-4' ? 'imagen-4.0-generate-001' : 'nano-banana'
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generate`
+      model === 'imagen-4'
+        ? 'imagen-4.0-generate-001'
+        : 'gemini-2.5-flash-image'
 
-    // Make the request to Gemini API
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey,
-      },
-      body: JSON.stringify({
-        prompt: {
-          text: prompt,
-        },
-        config: {
-          aspectRatio: '1:1',
-          numberOfImages: 1,
-        },
-      }),
+    console.log(`Generating image with model: ${modelName}`)
+    console.log(`Prompt: ${prompt}`)
+
+    // Generate image using Vercel AI SDK
+    const { image } = await generateImage({
+      model: google.image(modelName, { apiKey }),
+      prompt: prompt,
+      aspectRatio: '1:1',
     })
 
-    if (!response.ok) {
-      const error = await response.json()
-      console.error('Gemini API error:', error)
-      return NextResponse.json(
-        { error: error.error?.message || 'Gemini API request failed' },
-        { status: response.status }
-      )
-    }
+    // Convert image to base64 data URL
+    const base64Image = image.base64
+    const mimeType = image.contentType || 'image/png'
+    const imageUrl = `data:${mimeType};base64,${base64Image}`
 
-    const data = await response.json()
-
-    // Extract image URL from response
-    const imageUrl =
-      data.images?.[0]?.url || data.generatedImages?.[0]?.url || ''
-
-    if (!imageUrl) {
-      return NextResponse.json(
-        { error: 'No image URL in response' },
-        { status: 500 }
-      )
-    }
+    console.log('Image generated successfully')
 
     return NextResponse.json({ imageUrl })
   } catch (error) {
     console.error('API route error:', error)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
-    )
+    const errorMessage =
+      error instanceof Error ? error.message : 'Unknown error'
+    return NextResponse.json({ error: errorMessage }, { status: 500 })
   }
 }

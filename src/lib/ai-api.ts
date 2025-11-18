@@ -59,8 +59,9 @@ export async function generatePromptContent(
 }
 
 /**
- * Generate image using Gemini Imagen API via Next.js API route
- * This avoids CORS issues by running the request on the server
+ * Generate image using Gemini Imagen API via Next.js API route with Vercel AI SDK
+ * This avoids CORS issues and keeps API keys secure by running on the server
+ * Supports models: imagen-4 (imagen-4.0-generate-001) and nano-banana (gemini-2.5-flash-image)
  */
 export async function generateImageWithGemini(
   prompt: string,
@@ -87,8 +88,15 @@ export async function generateImageWithGemini(
     })
 
     if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.error || 'Image generation failed')
+      let errorMessage = 'Image generation failed'
+      try {
+        const error = await response.json()
+        errorMessage = error.error || errorMessage
+      } catch (e) {
+        // If response is not JSON, use status text
+        errorMessage = `${errorMessage}: ${response.statusText} (${response.status})`
+      }
+      throw new Error(errorMessage)
     }
 
     const data = await response.json()
