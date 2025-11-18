@@ -13,6 +13,8 @@ const STORAGE_KEYS = {
 const DEFAULT_SETTINGS: Settings = {
   openaiApiKey: '',
   geminiApiKey: '',
+  supabaseUrl: '',
+  supabaseAnonKey: '',
   systemPrompts: {
     parameters:
       'You are an AI assistant that generates parameter values. Given a parameter name, generate a comma-separated list of relevant values.',

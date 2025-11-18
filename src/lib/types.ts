@@ -5,6 +5,8 @@ export interface Settings {
   geminiApiKey: string
   qstashToken?: string
   qstashUrl?: string
+  supabaseUrl?: string
+  supabaseAnonKey?: string
   systemPrompts: {
     parameters: string
     prompts: string

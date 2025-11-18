@@ -68,7 +68,9 @@ export async function generatePromptContent(
  */
 export async function generateImageWithGemini(
   prompt: string,
-  model: GeminiModel
+  model: GeminiModel,
+  generationId?: string,
+  taskId?: string
 ): Promise<string> {
   const settings = getSettings()
 
@@ -87,6 +89,10 @@ export async function generateImageWithGemini(
         prompt,
         model,
         apiKey: settings.geminiApiKey,
+        generationId,
+        taskId,
+        supabaseUrl: settings.supabaseUrl,
+        supabaseAnonKey: settings.supabaseAnonKey,
       }),
     })
 

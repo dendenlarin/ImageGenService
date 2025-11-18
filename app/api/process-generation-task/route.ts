@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { experimental_generateImage as generateImage } from 'ai'
+import { uploadImageWithFallback } from '@/lib/supabase-storage'
 
 /**
  * Verify QStash signature to ensure request is from QStash
@@ -76,6 +77,8 @@ export async function POST(request: NextRequest) {
     const prompt = requestBody.prompt
     const model = requestBody.model
     const geminiApiKey = requestBody.geminiApiKey
+    const supabaseUrl = requestBody.supabaseUrl || ''
+    const supabaseAnonKey = requestBody.supabaseAnonKey || ''
 
     if (!generationId || !taskId || !prompt || !model || !geminiApiKey) {
       return NextResponse.json(
@@ -116,12 +119,23 @@ export async function POST(request: NextRequest) {
       1000
     )
 
-    // Convert image to base64 data URL
+    // Convert image to base64
     const base64Image = image.base64
     const mimeType = image.contentType || 'image/png'
-    const imageUrl = `data:${mimeType};base64,${base64Image}`
 
-    console.log(`[QStash] Successfully generated image for task ${taskId}`)
+    // Upload to Supabase (with fallback to base64 data URL)
+    const imageUrl = await uploadImageWithFallback(
+      base64Image,
+      generationId,
+      taskId,
+      {
+        url: supabaseUrl,
+        anonKey: supabaseAnonKey,
+      },
+      mimeType
+    )
+
+    console.log(`[QStash] Successfully generated and uploaded image for task ${taskId}`)
 
     // Store the result for client polling
     try {

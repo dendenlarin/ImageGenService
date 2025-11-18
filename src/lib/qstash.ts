@@ -75,6 +75,8 @@ export async function enqueueGenerationTask(
   geminiApiKey: string,
   delaySeconds: number = 0
 ): Promise<string> {
+  const settings = getSettings()
+
   // Get the base URL for the webhook endpoint
   const baseUrl =
     typeof window !== 'undefined'
@@ -91,6 +93,8 @@ export async function enqueueGenerationTask(
     body: {
       ...taskData,
       geminiApiKey,
+      supabaseUrl: settings.supabaseUrl || '',
+      supabaseAnonKey: settings.supabaseAnonKey || '',
     },
     delay: delaySeconds,
     retries: 3,
