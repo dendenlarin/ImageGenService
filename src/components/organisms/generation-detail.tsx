@@ -1,13 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Generation, GenerationTask } from '@/lib/types'
-import { getPromptById } from '@/lib/storage'
-import { generateImageWithGemini } from '@/lib/ai-api'
+import { getPromptById, getSettings } from '@/lib/storage'
+import { enqueueGenerationTask } from '@/lib/qstash'
 import { Trash2, Play, Pause, X, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -24,8 +24,11 @@ export function GenerationDetail({
 }: GenerationDetailProps) {
   const [isProcessing, setIsProcessing] = useState(false)
   const [currentTaskIndex, setCurrentTaskIndex] = useState<number | null>(null)
+  const isProcessingRef = useRef(false)
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   const prompt = getPromptById(generation.promptId)
+  const settings = getSettings()
 
   const completedTasks = generation.tasks.filter(
     (t) => t.status === 'completed'
@@ -98,76 +101,170 @@ export function GenerationDetail({
     }
   }
 
-  const processNextTask = async () => {
-    const pendingTaskIndex = generation.tasks.findIndex(
-      (t) => t.status === 'pending'
+  // Poll for task results from QStash
+  const pollForResults = async () => {
+    const processingTasks = generation.tasks.filter(
+      (t) => t.status === 'processing' && t.qstashMessageId
     )
 
-    if (pendingTaskIndex === -1) {
-      setIsProcessing(false)
-      setCurrentTaskIndex(null)
+    if (processingTasks.length === 0) {
+      // All tasks completed, stop processing
+      if (isProcessing) {
+        setIsProcessing(false)
+        isProcessingRef.current = false
+      }
       return
     }
 
-    setCurrentTaskIndex(pendingTaskIndex)
-    const task = generation.tasks[pendingTaskIndex]
-
-    // Update task status to processing
-    const updatedTasks = [...generation.tasks]
-    updatedTasks[pendingTaskIndex] = {
-      ...task,
-      status: 'processing',
-    }
-    onUpdate({
-      ...generation,
-      tasks: updatedTasks,
-      updatedAt: new Date().toISOString(),
-    })
+    const taskIds = processingTasks.map((t) => t.id).join(',')
 
     try {
-      // Generate image
-      const imageUrl = await generateImageWithGemini(task.prompt, generation.model)
+      const response = await fetch(
+        `/api/task-results?generationId=${generation.id}&taskIds=${taskIds}`
+      )
 
-      // Update task with completed status
-      updatedTasks[pendingTaskIndex] = {
-        ...task,
-        status: 'completed',
-        imageUrl,
-        completedAt: new Date().toISOString(),
+      if (response.ok) {
+        const { results } = await response.json()
+
+        // Update tasks with results
+        if (Object.keys(results).length > 0) {
+          const updatedTasks = generation.tasks.map((task) => {
+            const result = results[task.id]
+            if (result) {
+              return {
+                ...task,
+                status: result.status,
+                imageUrl: result.imageUrl,
+                error: result.error,
+                completedAt: result.completedAt,
+              }
+            }
+            return task
+          })
+
+          onUpdate({
+            ...generation,
+            tasks: updatedTasks,
+            updatedAt: new Date().toISOString(),
+          })
+        }
       }
     } catch (error) {
-      // Update task with failed status
-      updatedTasks[pendingTaskIndex] = {
-        ...task,
-        status: 'failed',
-        error: (error as Error).message,
-        completedAt: new Date().toISOString(),
+      console.error('Error polling for results:', error)
+    }
+  }
+
+  // Start polling when processing
+  useEffect(() => {
+    if (isProcessing) {
+      // Poll every 5 seconds
+      pollingIntervalRef.current = setInterval(pollForResults, 5000)
+    } else {
+      // Clear polling interval
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
+        pollingIntervalRef.current = null
       }
     }
 
-    onUpdate({
-      ...generation,
-      tasks: updatedTasks,
-      updatedAt: new Date().toISOString(),
-    })
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
+      }
+    }
+  }, [isProcessing, generation.tasks])
 
-    // Wait for rate limit (convert requests per hour to milliseconds)
-    const delayMs = (60 * 60 * 1000) / generation.rateLimit
-    await new Promise((resolve) => setTimeout(resolve, delayMs))
+  // Enqueue tasks to QStash with rate limiting
+  const enqueueTasksToQStash = async () => {
+    if (!settings.qstashToken) {
+      alert('Пожалуйста, настройте QStash токен в настройках')
+      return false
+    }
 
-    // Process next task if still processing
-    if (isProcessing) {
-      await processNextTask()
+    if (!settings.geminiApiKey) {
+      alert('Пожалуйста, настройте Gemini API ключ в настройках')
+      return false
+    }
+
+    const pendingTasks = generation.tasks.filter((t) => t.status === 'pending')
+
+    if (pendingTasks.length === 0) {
+      return false
+    }
+
+    try {
+      // Calculate delay between tasks based on rate limit
+      const delaySeconds = Math.ceil((60 * 60) / generation.rateLimit)
+
+      // Enqueue all pending tasks with incremental delays
+      const updatedTasks = [...generation.tasks]
+
+      for (let i = 0; i < pendingTasks.length; i++) {
+        const task = pendingTasks[i]
+        const taskIndex = generation.tasks.findIndex((t) => t.id === task.id)
+
+        // Calculate delay for this task
+        const taskDelay = i * delaySeconds
+
+        try {
+          // Enqueue task to QStash
+          const messageId = await enqueueGenerationTask(
+            {
+              generationId: generation.id,
+              taskId: task.id,
+              prompt: task.prompt,
+              model: generation.model,
+            },
+            settings.geminiApiKey,
+            taskDelay
+          )
+
+          // Update task with QStash message ID and processing status
+          updatedTasks[taskIndex] = {
+            ...task,
+            status: 'processing',
+            qstashMessageId: messageId,
+          }
+
+          console.log(
+            `Enqueued task ${task.id} with ${taskDelay}s delay, messageId: ${messageId}`
+          )
+        } catch (error) {
+          console.error(`Failed to enqueue task ${task.id}:`, error)
+          updatedTasks[taskIndex] = {
+            ...task,
+            status: 'failed',
+            error: (error as Error).message,
+          }
+        }
+      }
+
+      // Update generation with new task statuses
+      onUpdate({
+        ...generation,
+        tasks: updatedTasks,
+        updatedAt: new Date().toISOString(),
+      })
+
+      return true
+    } catch (error) {
+      console.error('Error enqueuing tasks:', error)
+      alert('Ошибка при постановке задач в очередь: ' + (error as Error).message)
+      return false
     }
   }
 
   const handleStartProcessing = async () => {
-    setIsProcessing(true)
-    await processNextTask()
+    const success = await enqueueTasksToQStash()
+    if (success) {
+      setIsProcessing(true)
+      isProcessingRef.current = true
+    }
   }
 
   const handleStopProcessing = () => {
     setIsProcessing(false)
+    isProcessingRef.current = false
     setCurrentTaskIndex(null)
   }
 
